@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>Conectando...</title></head>
+<body>
+<script type="module">
+  import { handleCallback } from './spotify.js';
+  const ok = await handleCallback();
+  window.location.href = ok ? '/' : '/?error=auth';
+</script>
+</body>
+</html>
