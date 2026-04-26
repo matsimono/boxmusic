@@ -151,6 +151,8 @@ export const next         = ()         => apiPost('/me/player/next');
 export const previous     = ()         => apiPost('/me/player/previous');
 export const seek         = (ms)       => apiPut(`/me/player/seek?position_ms=${ms}`);
 export const setVolume    = (pct)      => apiPut(`/me/player/volume?volume_percent=${pct}`);
+export const setShuffle   = (state)    => apiPut(`/me/player/shuffle?state=${state}`);
+export const setRepeat    = (state)    => apiPut(`/me/player/repeat?state=${state}`);
 export const getDevices   = async ()   => (await apiGet('/me/player/devices'))?.devices || [];
 export const transferPlayback = (id)   => apiPut('/me/player', { device_ids: [id], play: true });
 
