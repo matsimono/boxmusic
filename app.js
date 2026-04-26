@@ -1,5 +1,5 @@
 /* ══════════════════════════════
-   app.js — Browser puro, sin Electron
+   app.js — Browser puro, sin player
    ══════════════════════════════ */
 
 import * as Spotify from './spotify.js';
@@ -11,7 +11,7 @@ const state = {
   panelOpen:   true,
   panelWidth:  260,
   currentView: 'inicio',
-  library:     { filter: 'todo', items: [], loading: false },
+  library:     { filter: 'todo' },
 };
 
 // ── DOM refs ──
@@ -29,21 +29,6 @@ const resizeHandle         = document.getElementById('resizeHandle');
 const searchInput          = document.getElementById('searchInput');
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ══ NAVEGACIÓN ═══════════════════════════════════════════════
 
 function navigate(viewId) {
@@ -54,7 +39,7 @@ function navigate(viewId) {
   const activeBtn = document.querySelector(`.sidebar-btn[data-view="${viewId}"]`);
   if (activeBtn) activeBtn.classList.add('active');
   state.currentView = viewId;
-  if (viewId === 'busqueda') searchInput.focus();
+  if (viewId === 'busqueda')  searchInput.focus();
   if (viewId === 'biblioteca') loadLibrary();
 }
 
@@ -127,7 +112,6 @@ window.spotifyLogout = () => {
   stopPolling();
   updateSpotifyUI();
   updateNowPlaying(null);
-  updateProgress(null);
 };
 
 function updateSpotifyUI() {
@@ -141,11 +125,9 @@ function updateSpotifyUI() {
 
 function updateNowPlaying(track) {
   state.nowPlaying = track;
-
   document.getElementById('npTitle').textContent  = track?.title  || '—';
   document.getElementById('npArtist').textContent = track?.artist || '—';
   document.getElementById('npAlbum').textContent  = track?.album  || '—';
-
   const cover = document.getElementById('npCover');
   const ph    = document.getElementById('npCoverPlaceholder');
   if (track?.cover) {
@@ -153,286 +135,33 @@ function updateNowPlaying(track) {
   } else {
     cover.style.display = 'none'; ph.style.display = 'flex';
   }
-
 }
-
-
-// ══ PROGRESO ══════════════════════════════════════════════════
-
-function formatTime(ms) {
-  if (!ms) return '0:00';
-  const s = Math.floor(ms / 1000);
-  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
-}
-
-// ── updateProgress mantiene compatibilidad con código existente ──
-function updateProgress(data) {
-  if (!data?.durationMs) {
-    progressFill.style.width = '0%';
-    progressCurrent.textContent = '0:00';
-    progressTotal.textContent   = '0:00';
-    return;
-  }
-  if (state.nowPlaying) {
-    state.nowPlaying.durationMs = data.durationMs;
-    state.nowPlaying.progressMs = data.progressMs;
-  }
-  progressFill.style.width    = `${(data.progressMs / data.durationMs) * 100}%`;
-  progressCurrent.textContent = formatTime(data.progressMs);
-  progressTotal.textContent   = formatTime(data.durationMs);
-}
-
-
-// ══ SEEK — sin retraso visual ════════════════════════════════
-
-let isSeeking = false;
-
-function getSeekMs(e) {
-  const bar = playerTrack.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - bar.left) / bar.width));
-  return Math.floor(pct * (state.nowPlaying?.durationMs || 0));
-}
-
-// Actualiza la barra visualmente mientras arrastras
-function applySeekVisual(ms) {
-  if (!state.nowPlaying?.durationMs) return;
-  const pct = ms / state.nowPlaying.durationMs;
-  progressFill.style.transition = 'none';
-  progressFill.style.width = `${pct * 100}%`;
-  progressCurrent.textContent = formatTime(ms);
-}
-
-playerTrack?.addEventListener('mousedown', (e) => {
-  if (!state.nowPlaying?.durationMs) return;
-  isSeeking = true;
-  progressFill.style.transition = 'none';
-  applySeekVisual(getSeekMs(e));
-});
-
-document.addEventListener('mousemove', (e) => {
-  if (!isSeeking) return;
-  applySeekVisual(getSeekMs(e));
-});
-
-document.addEventListener('mouseup', async (e) => {
-  if (!isSeeking) return;
-  isSeeking = false;
-  const ms = getSeekMs(e);
-  setAnchor(ms);
-  progressFill.style.transition = '';
-  await Spotify.seek(ms);
-});
-
-// Touch support (móvil)
-playerTrack?.addEventListener('touchstart', (e) => {
-  if (!state.nowPlaying?.durationMs) return;
-  isSeeking = true;
-  applySeekVisual(getSeekMsTouch(e));
-}, { passive: true });
-
-document.addEventListener('touchmove', (e) => {
-  if (!isSeeking) return;
-  applySeekVisual(getSeekMsTouch(e));
-}, { passive: true });
-
-document.addEventListener('touchend', async (e) => {
-  if (!isSeeking) return;
-  isSeeking = false;
-  const ms = getSeekMsTouch(e);
-  setAnchor(ms);
-  progressFill.style.transition = '';
-  await Spotify.seek(ms);
-});
-
-function getSeekMsTouch(e) {
-  const touch = e.touches[0] || e.changedTouches[0];
-  const bar   = playerTrack.getBoundingClientRect();
-  const pct   = Math.max(0, Math.min(1, (touch.clientX - bar.left) / bar.width));
-  return Math.floor(pct * (state.nowPlaying?.durationMs || 0));
-}
-
-
-// ══ PLAYER CONTROLS ══════════════════════════════════════════
-
-// shuffle / repeat state
-let shuffleOn = false, repeatMode = 0; // 0=off 1=all 2=one
-let volumeLevel = 0.8, muted = false;
-
-function updatePlayPauseBtn(playing) {
-  if (!btnPlayPause) return;
-  btnPlayPause.innerHTML = playing
-    ? `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`
-    : `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
-}
-
-btnPlayPause?.addEventListener('click', async () => {
-  if (state.nowPlaying?.playing) {
-    await Spotify.pause();
-    state.nowPlaying.playing = false;
-    isPlaying = false;
-    setAnchor(getCurrentMs()); // congela la posición actual
-  } else {
-    await Spotify.play(state.deviceId);
-    state.nowPlaying.playing = true;
-    isPlaying = true;
-    setAnchor(getCurrentMs()); // reanuda desde aquí
-  }
-  updatePlayPauseBtn(state.nowPlaying?.playing);
-});
-
-btnNext?.addEventListener('click', () => Spotify.next());
-btnPrev?.addEventListener('click', () => Spotify.previous());
-
-// ── SHUFFLE ──
-btnShuffle?.addEventListener('click', async () => {
-  shuffleOn = !shuffleOn;
-  btnShuffle.classList.toggle('active', shuffleOn);
-  await Spotify.setShuffle(shuffleOn);
-});
-
-// ── REPEAT ──
-btnRepeat?.addEventListener('click', async () => {
-  repeatMode = (repeatMode + 1) % 3;
-  const modes = ['off', 'context', 'track'];
-  const icons = [
-    // off
-    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
-    // all
-    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
-    // one — añade "1"
-    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><text x="10" y="14" font-size="7" fill="currentColor" stroke="none">1</text></svg>`,
-  ];
-  btnRepeat.classList.toggle('active', repeatMode > 0);
-  btnRepeat.innerHTML = icons[repeatMode];
-  await Spotify.setRepeat(modes[repeatMode]);
-});
-
-// ── VOLUMEN ──
-function setVolume(v) {
-  volumeLevel = Math.max(0, Math.min(1, v));
-  volumeFill.style.width = `${volumeLevel * 100}%`;
-  Spotify.setVolume(Math.round(volumeLevel * 100));
-  updateVolumeIcon();
-}
-
-function updateVolumeIcon() {
-  const v = muted ? 0 : volumeLevel;
-  let icon;
-  if (v === 0)      icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
-  else if (v < 0.5) icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
-  else              icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
-  btnMute.innerHTML = icon;
-}
-
-btnMute?.addEventListener('click', () => {
-  muted = !muted;
-  Spotify.setVolume(muted ? 0 : Math.round(volumeLevel * 100));
-  volumeFill.style.width = muted ? '0%' : `${volumeLevel * 100}%`;
-  updateVolumeIcon();
-});
-
-// Drag volumen
-let isDraggingVol = false;
-volumeTrack?.addEventListener('mousedown', (e) => {
-  isDraggingVol = true;
-  applyVolumeDrag(e);
-});
-document.addEventListener('mousemove', (e) => { if (isDraggingVol) applyVolumeDrag(e); });
-document.addEventListener('mouseup',   ()  => { isDraggingVol = false; });
-
-function applyVolumeDrag(e) {
-  const bar = volumeTrack.getBoundingClientRect();
-  const v   = Math.max(0, Math.min(1, (e.clientX - bar.left) / bar.width));
-  muted = false;
-  setVolume(v);
-}
-
-// Scroll en volumen
-volumeTrack?.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  setVolume(volumeLevel + (e.deltaY < 0 ? 0.05 : -0.05));
-}, { passive: false });
 
 
 // ══ POLLING ══════════════════════════════════════════════════
 
-// ══ PROGRESO RAF ═════════════════════════════════════════════
-// Una sola fuente de verdad: progressAnchorTime + progressAnchorMs
-// El RAF nunca para — solo dibuja cuando isPlaying y no isSeeking
-
 let pollInterval = null;
-let localDuration = 0, isPlaying = false, lastId = null;
-let progressAnchorMs   = 0;   // posición en ms en el momento del anchor
-let progressAnchorTime = 0;   // performance.now() en el momento del anchor
-let rafId = null;
-
-function setAnchor(posMs) {
-  progressAnchorMs   = posMs;
-  progressAnchorTime = performance.now();
-}
-
-function getCurrentMs() {
-  if (!isPlaying) return progressAnchorMs;
-  return Math.min(progressAnchorMs + (performance.now() - progressAnchorTime), localDuration);
-}
-
-function startRAF() {
-  if (rafId) return;
-  function tick() {
-    rafId = requestAnimationFrame(tick);
-    if (isSeeking) return;
-    const ms  = getCurrentMs();
-    const pct = localDuration > 0 ? (ms / localDuration) * 100 : 0;
-    progressFill.style.width    = pct + '%';
-    progressCurrent.textContent = formatTime(ms);
-  }
-  rafId = requestAnimationFrame(tick);
-}
-
-function stopRAF() {
-  cancelAnimationFrame(rafId);
-  rafId = null;
-}
+let lastId = null;
 
 function startPolling() {
   if (pollInterval) return;
-  startRAF(); // RAF corre siempre, isPlaying controla si avanza
-
   async function poll() {
-    if (isSeeking) return;
     const track = await Spotify.fetchNowPlaying();
     if (track) {
-      const trackChanged = track.id !== lastId;
-      if (trackChanged) { lastId = track.id; updateNowPlaying(track); }
-
-      localDuration = track.durationMs;
-      progressTotal.textContent = formatTime(localDuration);
-
-      const wasPlaying = isPlaying;
-      isPlaying = track.playing;
-
-      // Solo actualiza el anchor si la posición real difiere >2s de la estimada
-      const estimated = getCurrentMs();
-      const drift = Math.abs(estimated - track.progressMs);
-      if (trackChanged || drift > 2000 || (!wasPlaying && isPlaying)) {
-        setAnchor(track.progressMs);
-      }
-
+      if (track.id !== lastId) { lastId = track.id; updateNowPlaying(track); }
       if (track.deviceId) state.deviceId = track.deviceId;
     } else if (lastId !== null) {
       lastId = null;
-      isPlaying = false;
       updateNowPlaying(null);
     }
   }
-
   poll();
   pollInterval = setInterval(poll, 5000);
 }
 
 function stopPolling() {
-  clearInterval(pollInterval); pollInterval = null;
-  stopRAF();
+  clearInterval(pollInterval);
+  pollInterval = null;
 }
 
 
@@ -443,7 +172,6 @@ let spotifyPlayer = null;
 function initSDK() {
   const token = Spotify.getToken();
   if (!token) return;
-
   if (typeof window.Spotify === 'undefined') {
     window.onSpotifyWebPlaybackSDKReady = () => createPlayer(token);
   } else {
@@ -453,25 +181,95 @@ function initSDK() {
 
 function createPlayer(token) {
   if (spotifyPlayer) { spotifyPlayer.disconnect(); spotifyPlayer = null; }
-
   spotifyPlayer = new window.Spotify.Player({
-    name:          'placeholder1',
+    name: 'placeholder1',
     getOAuthToken: cb => cb(token),
-    volume:        0.8,
+    volume: 0.8,
   });
-
   spotifyPlayer.addListener('ready', async ({ device_id }) => {
-    console.log('[SDK] listo:', device_id);
     state.deviceId = device_id;
     await Spotify.transferPlayback(device_id);
   });
-
-  spotifyPlayer.addListener('not_ready',            ({ device_id }) => console.warn('[SDK] offline:', device_id));
-  spotifyPlayer.addListener('initialization_error', ({ message })   => console.error('[SDK] init:', message));
-  spotifyPlayer.addListener('authentication_error', ({ message })   => console.error('[SDK] auth:', message));
-  spotifyPlayer.addListener('account_error',        ({ message })   => console.error('[SDK] account:', message));
-
   spotifyPlayer.connect();
+}
+
+
+// ══ HOME SECTIONS ═════════════════════════════════════════════
+
+function homeCard(item) {
+  return `
+    <div class="home-card" data-uri="${item.uri || ''}">
+      <div class="home-card-cover">
+        ${item.cover
+          ? `<img src="${item.cover}" alt="${item.name}" loading="lazy">`
+          : `<div class="home-card-placeholder"></div>`}
+      </div>
+      <div class="home-card-name">${item.name}</div>
+      <div class="home-card-sub">${item.sub || ''}</div>
+    </div>`;
+}
+
+function trackRow(track, index) {
+  return `
+    <div class="home-track-row" data-uri="${track.uri || ''}">
+      <div class="home-track-num">${index + 1}</div>
+      <div class="home-track-cover">
+        ${track.cover ? `<img src="${track.cover}" alt="${track.name}" loading="lazy">` : '<div class="home-card-placeholder"></div>'}
+      </div>
+      <div class="home-track-info">
+        <div class="home-track-name">${track.name}</div>
+        <div class="home-track-artist">${track.artist}</div>
+      </div>
+      <div class="home-track-album">${track.album}</div>
+    </div>`;
+}
+
+async function loadHomeSections() {
+  if (!state.connected) return;
+  try {
+    const [recent, playlists] = await Promise.all([
+      Spotify.getSavedTracks(),
+      Spotify.getPlaylists(),
+    ]);
+
+    // Recientes
+    const recentsList = document.getElementById('recentsList');
+    if (recentsList && recent.length) {
+      recentsList.innerHTML = recent.slice(0, 10).map(t => homeCard({
+        name: t.name, cover: t.cover, uri: t.uri, sub: t.artist,
+      })).join('');
+    }
+
+    // Jump Back In — playlists
+    const jumpList = document.getElementById('jumpBackList');
+    if (jumpList && playlists.length) {
+      jumpList.innerHTML = playlists.slice(0, 8).map(p => homeCard({
+        name: p.name, cover: p.cover, uri: p.uri, sub: `${p.tracks} canciones`,
+      })).join('');
+    }
+
+    // Last Liked Songs
+    const likedList = document.getElementById('likedList');
+    if (likedList && recent.length) {
+      likedList.innerHTML = recent.slice(0, 8).map((t, i) => trackRow(t, i)).join('');
+    }
+
+    // Albums Featuring Songs You Like
+    const albumsMap = {};
+    recent.slice(0, 50).forEach(t => {
+      if (t.album && !albumsMap[t.album]) {
+        albumsMap[t.album] = { name: t.album, cover: t.cover, sub: t.artist, uri: '' };
+      }
+    });
+    const albumsList = document.getElementById('albumsList');
+    if (albumsList) {
+      const albums = Object.values(albumsMap).slice(0, 8);
+      if (albums.length) albumsList.innerHTML = albums.map(a => homeCard(a)).join('');
+    }
+
+  } catch (e) {
+    console.error('Error cargando home:', e);
+  }
 }
 
 
@@ -506,7 +304,6 @@ function renderLibrary(items) {
   const container = document.getElementById('libraryGrid');
   if (!container) return;
   if (!items.length) { container.innerHTML = '<div class="lib-loading">Sin elementos</div>'; return; }
-
   container.innerHTML = items.map(item => `
     <div class="lib-item" data-type="${item.type}" data-uri="${item.uri || ''}">
       <div class="lib-cover">
@@ -515,8 +312,7 @@ function renderLibrary(items) {
       </div>
       <div class="lib-name">${item.name}</div>
       <div class="lib-sub">${libSub(item)}</div>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 function libSub(item) {
@@ -554,92 +350,6 @@ searchInput.addEventListener('input', e => {
 document.querySelectorAll('.pin-slot').forEach(slot => {
   slot.addEventListener('click', () => console.log(`Pin slot ${slot.dataset.index}`));
 });
-
-
-// ══ HOME SECTIONS ═════════════════════════════════════════════
-
-function homeCard(item) {
-  return `
-    <div class="home-card" data-uri="${item.uri || ''}">
-      <div class="home-card-cover">
-        ${item.cover
-          ? `<img src="${item.cover}" alt="${item.name}" loading="lazy">`
-          : `<div class="home-card-placeholder"></div>`}
-      </div>
-      <div class="home-card-name">${item.name}</div>
-      <div class="home-card-sub">${item.sub || ''}</div>
-    </div>`;
-}
-
-function trackRow(track, index) {
-  return `
-    <div class="home-track-row" data-uri="${track.uri || ''}">
-      <div class="home-track-num">${index + 1}</div>
-      <div class="home-track-cover">
-        ${track.cover ? `<img src="${track.cover}" alt="${track.name}" loading="lazy">` : '<div class="home-card-placeholder"></div>'}
-      </div>
-      <div class="home-track-info">
-        <div class="home-track-name">${track.name}</div>
-        <div class="home-track-artist">${track.artist}</div>
-      </div>
-      <div class="home-track-album">${track.album}</div>
-    </div>`;
-}
-
-async function loadHomeSections() {
-  if (!state.connected) return;
-
-  // ── Recientes: canciones recientes del historial (saved tracks como proxy) ──
-  try {
-    const recent = await Spotify.getSavedTracks();
-    const recentSlice = recent.slice(0, 10);
-    const recentsList = document.getElementById('recentsList');
-    if (recentsList && recentSlice.length) {
-      recentsList.innerHTML = recentSlice.map(t => homeCard({
-        name:  t.name,
-        cover: t.cover,
-        uri:   t.uri,
-        sub:   t.artist,
-      })).join('');
-    }
-
-    // ── Jump Back In: playlists recientes ──
-    const playlists = await Spotify.getPlaylists();
-    const jumpList = document.getElementById('jumpBackList');
-    if (jumpList && playlists.length) {
-      jumpList.innerHTML = playlists.slice(0, 8).map(p => homeCard({
-        name:  p.name,
-        cover: p.cover,
-        uri:   p.uri,
-        sub:   `${p.tracks} canciones`,
-      })).join('');
-    }
-
-    // ── Last Liked Songs: últimas 8 canciones guardadas ──
-    const likedList = document.getElementById('likedList');
-    if (likedList && recent.length) {
-      likedList.innerHTML = recent.slice(0, 8).map((t, i) => trackRow(t, i)).join('');
-    }
-
-    // ── Albums Featuring Songs You Like ──
-    const albumsMap = {};
-    recent.slice(0, 50).forEach(t => {
-      if (t.album && !albumsMap[t.album]) {
-        albumsMap[t.album] = { name: t.album, cover: t.cover, sub: t.artist, uri: '' };
-      }
-    });
-    const albumsList = document.getElementById('albumsList');
-    if (albumsList) {
-      const albums = Object.values(albumsMap).slice(0, 8);
-      if (albums.length) {
-        albumsList.innerHTML = albums.map(a => homeCard(a)).join('');
-      }
-    }
-
-  } catch (e) {
-    console.error('Error cargando home:', e);
-  }
-}
 
 
 // ══ INIT ══════════════════════════════════════════════════════
