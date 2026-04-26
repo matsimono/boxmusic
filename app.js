@@ -172,6 +172,7 @@ function formatTime(ms) {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 }
 
+// ── updateProgress mantiene compatibilidad con código existente ──
 function updateProgress(data) {
   if (!data?.durationMs) {
     progressFill.style.width = '0%';
@@ -224,11 +225,8 @@ document.addEventListener('mouseup', async (e) => {
   if (!isSeeking) return;
   isSeeking = false;
   const ms = getSeekMs(e);
-  if (state.nowPlaying) state.nowPlaying.progressMs = ms;
-  localProgress = ms;
-  progressStart = performance.now() - ms;
+  setAnchor(ms);
   progressFill.style.transition = '';
-  if (isPlaying) startProgressRAF();
   await Spotify.seek(ms);
 });
 
@@ -248,11 +246,8 @@ document.addEventListener('touchend', async (e) => {
   if (!isSeeking) return;
   isSeeking = false;
   const ms = getSeekMsTouch(e);
-  if (state.nowPlaying) state.nowPlaying.progressMs = ms;
-  localProgress = ms;
-  progressStart = performance.now() - ms;
+  setAnchor(ms);
   progressFill.style.transition = '';
-  if (isPlaying) startProgressRAF();
   await Spotify.seek(ms);
 });
 
@@ -282,13 +277,12 @@ btnPlayPause?.addEventListener('click', async () => {
     await Spotify.pause();
     state.nowPlaying.playing = false;
     isPlaying = false;
-    stopProgressRAF();
+    setAnchor(getCurrentMs()); // congela la posición actual
   } else {
     await Spotify.play(state.deviceId);
     state.nowPlaying.playing = true;
     isPlaying = true;
-    progressStart = performance.now() - localProgress;
-    startProgressRAF();
+    setAnchor(getCurrentMs()); // reanuda desde aquí
   }
   updatePlayPauseBtn(state.nowPlaying?.playing);
 });
@@ -369,39 +363,47 @@ volumeTrack?.addEventListener('wheel', (e) => {
 
 // ══ POLLING ══════════════════════════════════════════════════
 
-let pollInterval = null, progressInterval = null;
-let localProgress = 0, localDuration = 0, isPlaying = false, lastId = null;
+// ══ PROGRESO RAF ═════════════════════════════════════════════
+// Una sola fuente de verdad: progressAnchorTime + progressAnchorMs
+// El RAF nunca para — solo dibuja cuando isPlaying y no isSeeking
 
+let pollInterval = null;
+let localDuration = 0, isPlaying = false, lastId = null;
+let progressAnchorMs   = 0;   // posición en ms en el momento del anchor
+let progressAnchorTime = 0;   // performance.now() en el momento del anchor
 let rafId = null;
-let progressStart = 0; // performance.now() - positionMs
 
-function startProgressRAF() {
-  cancelAnimationFrame(rafId);
-  progressStart = performance.now() - localProgress;
+function setAnchor(posMs) {
+  progressAnchorMs   = posMs;
+  progressAnchorTime = performance.now();
+}
 
+function getCurrentMs() {
+  if (!isPlaying) return progressAnchorMs;
+  return Math.min(progressAnchorMs + (performance.now() - progressAnchorTime), localDuration);
+}
+
+function startRAF() {
+  if (rafId) return;
   function tick() {
-    if (!isPlaying || isSeeking) return;
-    const elapsed = performance.now() - progressStart;
-    const clamped = Math.min(elapsed, localDuration);
-    const pct     = localDuration > 0 ? (clamped / localDuration) * 100 : 0;
-
-    progressFill.style.transition = 'none';
-    progressFill.style.width      = pct + '%';
-    progressCurrent.textContent   = formatTime(clamped);
-
     rafId = requestAnimationFrame(tick);
+    if (isSeeking) return;
+    const ms  = getCurrentMs();
+    const pct = localDuration > 0 ? (ms / localDuration) * 100 : 0;
+    progressFill.style.width    = pct + '%';
+    progressCurrent.textContent = formatTime(ms);
   }
-
   rafId = requestAnimationFrame(tick);
 }
 
-function stopProgressRAF() {
+function stopRAF() {
   cancelAnimationFrame(rafId);
   rafId = null;
 }
 
 function startPolling() {
   if (pollInterval) return;
+  startRAF(); // RAF corre siempre, isPlaying controla si avanza
 
   async function poll() {
     if (isSeeking) return;
@@ -409,24 +411,24 @@ function startPolling() {
     if (track) {
       const trackChanged = track.id !== lastId;
       if (trackChanged) { lastId = track.id; updateNowPlaying(track); }
-      localProgress = track.progressMs;
+
       localDuration = track.durationMs;
       progressTotal.textContent = formatTime(localDuration);
 
       const wasPlaying = isPlaying;
       isPlaying = track.playing;
 
-      // Sincroniza el RAF con la posición real
-      progressStart = performance.now() - localProgress;
-
-      if (isPlaying && (!wasPlaying || trackChanged)) startProgressRAF();
-      if (!isPlaying) stopProgressRAF();
+      // Solo actualiza el anchor si la posición real difiere >2s de la estimada
+      const estimated = getCurrentMs();
+      const drift = Math.abs(estimated - track.progressMs);
+      if (trackChanged || drift > 2000 || (!wasPlaying && isPlaying)) {
+        setAnchor(track.progressMs);
+      }
 
       if (track.deviceId) state.deviceId = track.deviceId;
     } else if (lastId !== null) {
       lastId = null;
       isPlaying = false;
-      stopProgressRAF();
       updateNowPlaying(null);
     }
   }
@@ -437,7 +439,7 @@ function startPolling() {
 
 function stopPolling() {
   clearInterval(pollInterval); pollInterval = null;
-  stopProgressRAF();
+  stopRAF();
 }
 
 
