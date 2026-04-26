@@ -11,7 +11,7 @@ const state = {
   panelOpen:   true,
   panelWidth:  260,
   currentView: 'inicio',
-  library:     { filter: 'todo' },
+  library:     { filter: 'albumes' },
 };
 
 // ── DOM refs ──
@@ -277,22 +277,31 @@ async function loadHomeSections() {
 
 async function loadLibrary(filter) {
   if (filter) state.library.filter = filter;
-  if (!state.connected) return;
   const container = document.getElementById('libraryGrid');
   if (!container) return;
 
-  const cacheKey = `lib_${state.library.filter}`;
+  const f = state.library.filter;
+
+  // Colección física no necesita Spotify
+  if (f === 'coleccion') {
+    container.innerHTML = '<div class="lib-loading">Conecta Discogs para ver tu colección física</div>';
+    return;
+  }
+
+  if (!state.connected) {
+    container.innerHTML = '<div class="lib-loading">Conecta Spotify para ver tu biblioteca</div>';
+    return;
+  }
+
+  const cacheKey = `lib_${f}`;
   const cached   = localStorage.getItem(cacheKey);
   if (cached) renderLibrary(JSON.parse(cached));
   else container.innerHTML = '<div class="lib-loading">Cargando...</div>';
 
   try {
     let items = [];
-    const f = state.library.filter;
-    if (f === 'todo' || f === 'playlists') items = items.concat(await Spotify.getPlaylists());
-    if (f === 'todo' || f === 'albumes')   items = items.concat(await Spotify.getSavedAlbums());
-    if (f === 'todo' || f === 'artistas')  items = items.concat(await Spotify.getFollowedArtists());
-    if (f === 'canciones')                 items = items.concat(await Spotify.getSavedTracks());
+    if (f === 'albumes')  items = await Spotify.getSavedAlbums();
+    if (f === 'artistas') items = await Spotify.getFollowedArtists();
     localStorage.setItem(cacheKey, JSON.stringify(items));
     renderLibrary(items);
   } catch (e) {
