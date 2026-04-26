@@ -225,9 +225,10 @@ document.addEventListener('mouseup', async (e) => {
   isSeeking = false;
   const ms = getSeekMs(e);
   if (state.nowPlaying) state.nowPlaying.progressMs = ms;
-  progressFill.style.transition = '';
-  // Mandar seek a Spotify y sincronizar localProgress
   localProgress = ms;
+  progressStart = performance.now() - ms;
+  progressFill.style.transition = '';
+  if (isPlaying) startProgressRAF();
   await Spotify.seek(ms);
 });
 
@@ -249,7 +250,9 @@ document.addEventListener('touchend', async (e) => {
   const ms = getSeekMsTouch(e);
   if (state.nowPlaying) state.nowPlaying.progressMs = ms;
   localProgress = ms;
+  progressStart = performance.now() - ms;
   progressFill.style.transition = '';
+  if (isPlaying) startProgressRAF();
   await Spotify.seek(ms);
 });
 
@@ -279,10 +282,13 @@ btnPlayPause?.addEventListener('click', async () => {
     await Spotify.pause();
     state.nowPlaying.playing = false;
     isPlaying = false;
+    stopProgressRAF();
   } else {
     await Spotify.play(state.deviceId);
     state.nowPlaying.playing = true;
     isPlaying = true;
+    progressStart = performance.now() - localProgress;
+    startProgressRAF();
   }
   updatePlayPauseBtn(state.nowPlaying?.playing);
 });
@@ -366,40 +372,72 @@ volumeTrack?.addEventListener('wheel', (e) => {
 let pollInterval = null, progressInterval = null;
 let localProgress = 0, localDuration = 0, isPlaying = false, lastId = null;
 
+let rafId = null;
+let progressStart = 0; // performance.now() - positionMs
+
+function startProgressRAF() {
+  cancelAnimationFrame(rafId);
+  progressStart = performance.now() - localProgress;
+
+  function tick() {
+    if (!isPlaying || isSeeking) return;
+    const elapsed = performance.now() - progressStart;
+    const clamped = Math.min(elapsed, localDuration);
+    const pct     = localDuration > 0 ? (clamped / localDuration) * 100 : 0;
+
+    progressFill.style.transition = 'none';
+    progressFill.style.width      = pct + '%';
+    progressCurrent.textContent   = formatTime(clamped);
+
+    rafId = requestAnimationFrame(tick);
+  }
+
+  rafId = requestAnimationFrame(tick);
+}
+
+function stopProgressRAF() {
+  cancelAnimationFrame(rafId);
+  rafId = null;
+}
+
 function startPolling() {
   if (pollInterval) return;
 
   async function poll() {
-    if (isSeeking) return; // no sobreescribir mientras arrastra
+    if (isSeeking) return;
     const track = await Spotify.fetchNowPlaying();
     if (track) {
-      if (track.id !== lastId) { lastId = track.id; updateNowPlaying(track); }
+      const trackChanged = track.id !== lastId;
+      if (trackChanged) { lastId = track.id; updateNowPlaying(track); }
       localProgress = track.progressMs;
       localDuration = track.durationMs;
-      isPlaying     = track.playing;
-      updateProgress({ progressMs: track.progressMs, durationMs: track.durationMs, playing: track.playing });
+      progressTotal.textContent = formatTime(localDuration);
+
+      const wasPlaying = isPlaying;
+      isPlaying = track.playing;
+
+      // Sincroniza el RAF con la posición real
+      progressStart = performance.now() - localProgress;
+
+      if (isPlaying && (!wasPlaying || trackChanged)) startProgressRAF();
+      if (!isPlaying) stopProgressRAF();
+
       if (track.deviceId) state.deviceId = track.deviceId;
     } else if (lastId !== null) {
       lastId = null;
+      isPlaying = false;
+      stopProgressRAF();
       updateNowPlaying(null);
     }
   }
 
   poll();
   pollInterval = setInterval(poll, 5000);
-
-  progressInterval = setInterval(() => {
-    if (isSeeking) return;
-    if (isPlaying && localDuration > 0) {
-      localProgress = Math.min(localProgress + 1000, localDuration);
-      updateProgress({ progressMs: localProgress, durationMs: localDuration, playing: true });
-    }
-  }, 1000);
 }
 
 function stopPolling() {
-  clearInterval(pollInterval);     pollInterval     = null;
-  clearInterval(progressInterval); progressInterval = null;
+  clearInterval(pollInterval); pollInterval = null;
+  stopProgressRAF();
 }
 
 
