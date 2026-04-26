@@ -27,21 +27,21 @@ const closePanelBtn        = document.getElementById('closePanelBtn');
 const reopenPanelBtn       = document.getElementById('reopenPanelBtn');
 const resizeHandle         = document.getElementById('resizeHandle');
 const searchInput          = document.getElementById('searchInput');
-const progressFill         = document.getElementById('progressFill');
-const progressCurrent      = document.getElementById('progressCurrent');
-const progressTotal        = document.getElementById('progressTotal');
-const playerTitle          = document.getElementById('playerTitle');
-const playerArtist         = document.getElementById('playerArtist');
-const playerThumb          = document.getElementById('playerThumb');
-const btnPlayPause         = document.getElementById('btnPlayPause');
-const btnNext              = document.getElementById('btnNext');
-const btnPrev              = document.getElementById('btnPrev');
-const btnShuffle           = document.getElementById('btnShuffle');
-const btnRepeat            = document.getElementById('btnRepeat');
-const btnMute              = document.getElementById('btnMute');
-const playerTrack          = document.getElementById('playerTrack');
-const volumeTrack          = document.getElementById('volumeTrack');
-const volumeFill           = document.getElementById('volumeFill');
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // ══ NAVEGACIÓN ═══════════════════════════════════════════════
@@ -154,13 +154,6 @@ function updateNowPlaying(track) {
     cover.style.display = 'none'; ph.style.display = 'flex';
   }
 
-  playerTitle.textContent  = track?.title  || '—';
-  playerArtist.textContent = track?.artist || '—';
-  playerThumb.innerHTML = track?.cover
-    ? `<img src="${track.cover}" alt="cover">`
-    : `<svg viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="1.5" width="20" height="20"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`;
-
-  updatePlayPauseBtn(track?.playing);
 }
 
 
@@ -385,23 +378,13 @@ function getCurrentMs() {
 
 function startRAF() {
   if (rafId) return;
-  let lastPct = -1, lastSec = -1;
   function tick() {
     rafId = requestAnimationFrame(tick);
     if (isSeeking) return;
     const ms  = getCurrentMs();
     const pct = localDuration > 0 ? (ms / localDuration) * 100 : 0;
-    // Solo actualiza DOM si cambió algo — evita repaints innecesarios
-    if (Math.abs(pct - lastPct) > 0.01) {
-      progressFill.style.transition = 'none';
-      progressFill.style.width = pct + '%';
-      lastPct = pct;
-    }
-    const sec = Math.floor(ms / 1000);
-    if (sec !== lastSec) {
-      progressCurrent.textContent = formatTime(ms);
-      lastSec = sec;
-    }
+    progressFill.style.width    = pct + '%';
+    progressCurrent.textContent = formatTime(ms);
   }
   rafId = requestAnimationFrame(tick);
 }
@@ -444,7 +427,7 @@ function startPolling() {
   }
 
   poll();
-  pollInterval = setInterval(poll, 3000);
+  pollInterval = setInterval(poll, 5000);
 }
 
 function stopPolling() {
@@ -573,17 +556,103 @@ document.querySelectorAll('.pin-slot').forEach(slot => {
 });
 
 
+// ══ HOME SECTIONS ═════════════════════════════════════════════
+
+function homeCard(item) {
+  return `
+    <div class="home-card" data-uri="${item.uri || ''}">
+      <div class="home-card-cover">
+        ${item.cover
+          ? `<img src="${item.cover}" alt="${item.name}" loading="lazy">`
+          : `<div class="home-card-placeholder"></div>`}
+      </div>
+      <div class="home-card-name">${item.name}</div>
+      <div class="home-card-sub">${item.sub || ''}</div>
+    </div>`;
+}
+
+function trackRow(track, index) {
+  return `
+    <div class="home-track-row" data-uri="${track.uri || ''}">
+      <div class="home-track-num">${index + 1}</div>
+      <div class="home-track-cover">
+        ${track.cover ? `<img src="${track.cover}" alt="${track.name}" loading="lazy">` : '<div class="home-card-placeholder"></div>'}
+      </div>
+      <div class="home-track-info">
+        <div class="home-track-name">${track.name}</div>
+        <div class="home-track-artist">${track.artist}</div>
+      </div>
+      <div class="home-track-album">${track.album}</div>
+    </div>`;
+}
+
+async function loadHomeSections() {
+  if (!state.connected) return;
+
+  // ── Recientes: canciones recientes del historial (saved tracks como proxy) ──
+  try {
+    const recent = await Spotify.getSavedTracks();
+    const recentSlice = recent.slice(0, 10);
+    const recentsList = document.getElementById('recentsList');
+    if (recentsList && recentSlice.length) {
+      recentsList.innerHTML = recentSlice.map(t => homeCard({
+        name:  t.name,
+        cover: t.cover,
+        uri:   t.uri,
+        sub:   t.artist,
+      })).join('');
+    }
+
+    // ── Jump Back In: playlists recientes ──
+    const playlists = await Spotify.getPlaylists();
+    const jumpList = document.getElementById('jumpBackList');
+    if (jumpList && playlists.length) {
+      jumpList.innerHTML = playlists.slice(0, 8).map(p => homeCard({
+        name:  p.name,
+        cover: p.cover,
+        uri:   p.uri,
+        sub:   `${p.tracks} canciones`,
+      })).join('');
+    }
+
+    // ── Last Liked Songs: últimas 8 canciones guardadas ──
+    const likedList = document.getElementById('likedList');
+    if (likedList && recent.length) {
+      likedList.innerHTML = recent.slice(0, 8).map((t, i) => trackRow(t, i)).join('');
+    }
+
+    // ── Albums Featuring Songs You Like ──
+    const albumsMap = {};
+    recent.slice(0, 50).forEach(t => {
+      if (t.album && !albumsMap[t.album]) {
+        albumsMap[t.album] = { name: t.album, cover: t.cover, sub: t.artist, uri: '' };
+      }
+    });
+    const albumsList = document.getElementById('albumsList');
+    if (albumsList) {
+      const albums = Object.values(albumsMap).slice(0, 8);
+      if (albums.length) {
+        albumsList.innerHTML = albums.map(a => homeCard(a)).join('');
+      }
+    }
+
+  } catch (e) {
+    console.error('Error cargando home:', e);
+  }
+}
+
+
 // ══ INIT ══════════════════════════════════════════════════════
 
 async function init() {
   nowplayingSection.style.width = state.panelWidth + 'px';
-  updatePlayPauseBtn(false);
 
   if (Spotify.isConnected()) {
     state.connected = true;
     updateSpotifyUI();
     startPolling();
     initSDK();
+    loadHomeSections();
   } else {
     updateSpotifyUI();
   }

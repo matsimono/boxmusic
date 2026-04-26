@@ -75,6 +75,8 @@
     <!-- INICIO -->
     <div class="view active" id="view-inicio">
       <div class="left-scroll">
+
+        <!-- Pins -->
         <div class="section-block">
           <div class="grid-label">Pins</div>
           <div class="pin-grid" id="pinGrid">
@@ -86,12 +88,47 @@
             <div class="pin-slot" data-index="5"><div class="pin-add">+</div></div>
           </div>
         </div>
+
+        <!-- Recientes -->
         <div class="section-block">
-          <div class="grid-label">Recientes</div>
-          <div class="recents-list" id="recentsList">
-            <div class="recent-placeholder">Sin actividad reciente</div>
+          <div class="section-row-header">
+            <div class="grid-label">Escuchado recientemente</div>
+          </div>
+          <div class="home-row" id="recentsList">
+            <div class="recent-placeholder">Conecta Spotify para ver tu historial</div>
           </div>
         </div>
+
+        <!-- Jump Back In -->
+        <div class="section-block" id="sectionJumpBack">
+          <div class="section-row-header">
+            <div class="grid-label">Volver a escuchar</div>
+          </div>
+          <div class="home-row" id="jumpBackList">
+            <div class="recent-placeholder">—</div>
+          </div>
+        </div>
+
+        <!-- Last Liked Songs -->
+        <div class="section-block" id="sectionLiked">
+          <div class="section-row-header">
+            <div class="grid-label">Últimas canciones que te gustaron</div>
+          </div>
+          <div class="home-tracks" id="likedList">
+            <div class="recent-placeholder">—</div>
+          </div>
+        </div>
+
+        <!-- Albums Featuring Songs You Like -->
+        <div class="section-block" id="sectionAlbums">
+          <div class="section-row-header">
+            <div class="grid-label">Álbumes con canciones que te gustan</div>
+          </div>
+          <div class="home-row" id="albumsList">
+            <div class="recent-placeholder">—</div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -198,63 +235,6 @@
   </div>
 </div>
 
-<!-- PLAYER FLOTANTE -->
-<div class="player-bar" id="playerBar">
-
-  <!-- PORTADA + INFO -->
-  <div class="player-left">
-    <div class="player-thumb" id="playerThumb">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="1.5" width="18" height="18"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-    </div>
-    <div class="player-info">
-      <div class="player-info-title" id="playerTitle">—</div>
-      <div class="player-info-artist" id="playerArtist">—</div>
-    </div>
-  </div>
-
-  <!-- CENTRO: controles + barra -->
-  <div class="player-center">
-    <div class="player-controls">
-      <button class="player-ctrl-btn" id="btnShuffle" title="Aleatorio">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
-      </button>
-      <button class="player-ctrl-btn" id="btnPrev" title="Anterior">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2"/></svg>
-      </button>
-      <button class="player-ctrl-btn play" id="btnPlayPause" title="Play/Pause">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      </button>
-      <button class="player-ctrl-btn" id="btnNext" title="Siguiente">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2"/></svg>
-      </button>
-      <button class="player-ctrl-btn" id="btnRepeat" title="Repetir">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-      </button>
-    </div>
-    <div class="player-progress">
-      <span class="player-time" id="progressCurrent">0:00</span>
-      <div class="player-track" id="playerTrack">
-        <div class="player-fill" id="progressFill"></div>
-      </div>
-      <span class="player-time" id="progressTotal">0:00</span>
-    </div>
-  </div>
-
-  <!-- DERECHA: volumen -->
-  <div class="player-right">
-    <button class="player-ctrl-btn" id="btnMute" title="Silenciar">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15" id="volumeIcon"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-    </button>
-    <div class="player-volume-wrap">
-      <div class="player-volume-track" id="volumeTrack">
-        <div class="player-volume-fill" id="volumeFill"></div>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<script src="https://sdk.scdn.co/spotify-player.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
