@@ -219,12 +219,12 @@ export async function getPlaylist(id) {
   if (!data) return null;
 
   // Paginar todas las canciones
-  let trackItems = [], url = `/playlists/${id}/tracks?limit=100`;
-  while (url) {
-    const page = await apiGet(url.replace('https://api.spotify.com/v1', ''));
+  let trackItems = [], nextUrl = `/playlists/${id}/tracks?limit=100`;
+  while (nextUrl) {
+    const page = await apiGet(nextUrl);
     if (!page) break;
     trackItems = trackItems.concat(page.items || []);
-    url = page.next ? page.next.replace('https://api.spotify.com/v1', '') : null;
+    nextUrl = page.next ? page.next.replace('https://api.spotify.com/v1', '') : null;
   }
 
   return {
