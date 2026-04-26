@@ -385,13 +385,23 @@ function getCurrentMs() {
 
 function startRAF() {
   if (rafId) return;
+  let lastPct = -1, lastSec = -1;
   function tick() {
     rafId = requestAnimationFrame(tick);
     if (isSeeking) return;
     const ms  = getCurrentMs();
     const pct = localDuration > 0 ? (ms / localDuration) * 100 : 0;
-    progressFill.style.width    = pct + '%';
-    progressCurrent.textContent = formatTime(ms);
+    // Solo actualiza DOM si cambió algo — evita repaints innecesarios
+    if (Math.abs(pct - lastPct) > 0.01) {
+      progressFill.style.transition = 'none';
+      progressFill.style.width = pct + '%';
+      lastPct = pct;
+    }
+    const sec = Math.floor(ms / 1000);
+    if (sec !== lastSec) {
+      progressCurrent.textContent = formatTime(ms);
+      lastSec = sec;
+    }
   }
   rafId = requestAnimationFrame(tick);
 }
@@ -434,7 +444,7 @@ function startPolling() {
   }
 
   poll();
-  pollInterval = setInterval(poll, 5000);
+  pollInterval = setInterval(poll, 3000);
 }
 
 function stopPolling() {
