@@ -36,7 +36,12 @@ const playerThumb          = document.getElementById('playerThumb');
 const btnPlayPause         = document.getElementById('btnPlayPause');
 const btnNext              = document.getElementById('btnNext');
 const btnPrev              = document.getElementById('btnPrev');
-const playerTrack          = document.querySelector('.player-track');
+const btnShuffle           = document.getElementById('btnShuffle');
+const btnRepeat            = document.getElementById('btnRepeat');
+const btnMute              = document.getElementById('btnMute');
+const playerTrack          = document.getElementById('playerTrack');
+const volumeTrack          = document.getElementById('volumeTrack');
+const volumeFill           = document.getElementById('volumeFill');
 
 
 // ══ NAVEGACIÓN ═══════════════════════════════════════════════
@@ -258,6 +263,10 @@ function getSeekMsTouch(e) {
 
 // ══ PLAYER CONTROLS ══════════════════════════════════════════
 
+// shuffle / repeat state
+let shuffleOn = false, repeatMode = 0; // 0=off 1=all 2=one
+let volumeLevel = 0.8, muted = false;
+
 function updatePlayPauseBtn(playing) {
   if (!btnPlayPause) return;
   btnPlayPause.innerHTML = playing
@@ -280,6 +289,76 @@ btnPlayPause?.addEventListener('click', async () => {
 
 btnNext?.addEventListener('click', () => Spotify.next());
 btnPrev?.addEventListener('click', () => Spotify.previous());
+
+// ── SHUFFLE ──
+btnShuffle?.addEventListener('click', async () => {
+  shuffleOn = !shuffleOn;
+  btnShuffle.classList.toggle('active', shuffleOn);
+  await Spotify.setShuffle(shuffleOn);
+});
+
+// ── REPEAT ──
+btnRepeat?.addEventListener('click', async () => {
+  repeatMode = (repeatMode + 1) % 3;
+  const modes = ['off', 'context', 'track'];
+  const icons = [
+    // off
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
+    // all
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
+    // one — añade "1"
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><text x="10" y="14" font-size="7" fill="currentColor" stroke="none">1</text></svg>`,
+  ];
+  btnRepeat.classList.toggle('active', repeatMode > 0);
+  btnRepeat.innerHTML = icons[repeatMode];
+  await Spotify.setRepeat(modes[repeatMode]);
+});
+
+// ── VOLUMEN ──
+function setVolume(v) {
+  volumeLevel = Math.max(0, Math.min(1, v));
+  volumeFill.style.width = `${volumeLevel * 100}%`;
+  Spotify.setVolume(Math.round(volumeLevel * 100));
+  updateVolumeIcon();
+}
+
+function updateVolumeIcon() {
+  const v = muted ? 0 : volumeLevel;
+  let icon;
+  if (v === 0)      icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+  else if (v < 0.5) icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+  else              icon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`;
+  btnMute.innerHTML = icon;
+}
+
+btnMute?.addEventListener('click', () => {
+  muted = !muted;
+  Spotify.setVolume(muted ? 0 : Math.round(volumeLevel * 100));
+  volumeFill.style.width = muted ? '0%' : `${volumeLevel * 100}%`;
+  updateVolumeIcon();
+});
+
+// Drag volumen
+let isDraggingVol = false;
+volumeTrack?.addEventListener('mousedown', (e) => {
+  isDraggingVol = true;
+  applyVolumeDrag(e);
+});
+document.addEventListener('mousemove', (e) => { if (isDraggingVol) applyVolumeDrag(e); });
+document.addEventListener('mouseup',   ()  => { isDraggingVol = false; });
+
+function applyVolumeDrag(e) {
+  const bar = volumeTrack.getBoundingClientRect();
+  const v   = Math.max(0, Math.min(1, (e.clientX - bar.left) / bar.width));
+  muted = false;
+  setVolume(v);
+}
+
+// Scroll en volumen
+volumeTrack?.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  setVolume(volumeLevel + (e.deltaY < 0 ? 0.05 : -0.05));
+}, { passive: false });
 
 
 // ══ POLLING ══════════════════════════════════════════════════
