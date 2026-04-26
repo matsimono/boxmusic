@@ -36,6 +36,7 @@ const playerThumb          = document.getElementById('playerThumb');
 const btnPlayPause         = document.getElementById('btnPlayPause');
 const btnNext              = document.getElementById('btnNext');
 const btnPrev              = document.getElementById('btnPrev');
+const playerTrack          = document.querySelector('.player-track');
 
 
 // ══ NAVEGACIÓN ═══════════════════════════════════════════════
@@ -182,14 +183,77 @@ function updateProgress(data) {
   progressTotal.textContent   = formatTime(data.durationMs);
 }
 
-document.querySelector('.player-track')?.addEventListener('click', (e) => {
-  if (!state.nowPlaying?.durationMs) return;
-  const bar = e.currentTarget.getBoundingClientRect();
+
+// ══ SEEK — sin retraso visual ════════════════════════════════
+
+let isSeeking = false;
+
+function getSeekMs(e) {
+  const bar = playerTrack.getBoundingClientRect();
   const pct = Math.max(0, Math.min(1, (e.clientX - bar.left) / bar.width));
-  const ms  = Math.floor(pct * state.nowPlaying.durationMs);
-  updateProgress({ progressMs: ms, durationMs: state.nowPlaying.durationMs, playing: state.nowPlaying.playing });
-  Spotify.seek(ms);
+  return Math.floor(pct * (state.nowPlaying?.durationMs || 0));
+}
+
+// Actualiza la barra visualmente mientras arrastras
+function applySeekVisual(ms) {
+  if (!state.nowPlaying?.durationMs) return;
+  const pct = ms / state.nowPlaying.durationMs;
+  progressFill.style.transition = 'none';
+  progressFill.style.width = `${pct * 100}%`;
+  progressCurrent.textContent = formatTime(ms);
+}
+
+playerTrack?.addEventListener('mousedown', (e) => {
+  if (!state.nowPlaying?.durationMs) return;
+  isSeeking = true;
+  progressFill.style.transition = 'none';
+  applySeekVisual(getSeekMs(e));
 });
+
+document.addEventListener('mousemove', (e) => {
+  if (!isSeeking) return;
+  applySeekVisual(getSeekMs(e));
+});
+
+document.addEventListener('mouseup', async (e) => {
+  if (!isSeeking) return;
+  isSeeking = false;
+  const ms = getSeekMs(e);
+  if (state.nowPlaying) state.nowPlaying.progressMs = ms;
+  progressFill.style.transition = '';
+  // Mandar seek a Spotify y sincronizar localProgress
+  localProgress = ms;
+  await Spotify.seek(ms);
+});
+
+// Touch support (móvil)
+playerTrack?.addEventListener('touchstart', (e) => {
+  if (!state.nowPlaying?.durationMs) return;
+  isSeeking = true;
+  applySeekVisual(getSeekMsTouch(e));
+}, { passive: true });
+
+document.addEventListener('touchmove', (e) => {
+  if (!isSeeking) return;
+  applySeekVisual(getSeekMsTouch(e));
+}, { passive: true });
+
+document.addEventListener('touchend', async (e) => {
+  if (!isSeeking) return;
+  isSeeking = false;
+  const ms = getSeekMsTouch(e);
+  if (state.nowPlaying) state.nowPlaying.progressMs = ms;
+  localProgress = ms;
+  progressFill.style.transition = '';
+  await Spotify.seek(ms);
+});
+
+function getSeekMsTouch(e) {
+  const touch = e.touches[0] || e.changedTouches[0];
+  const bar   = playerTrack.getBoundingClientRect();
+  const pct   = Math.max(0, Math.min(1, (touch.clientX - bar.left) / bar.width));
+  return Math.floor(pct * (state.nowPlaying?.durationMs || 0));
+}
 
 
 // ══ PLAYER CONTROLS ══════════════════════════════════════════
@@ -205,9 +269,11 @@ btnPlayPause?.addEventListener('click', async () => {
   if (state.nowPlaying?.playing) {
     await Spotify.pause();
     state.nowPlaying.playing = false;
+    isPlaying = false;
   } else {
     await Spotify.play(state.deviceId);
     state.nowPlaying.playing = true;
+    isPlaying = true;
   }
   updatePlayPauseBtn(state.nowPlaying?.playing);
 });
@@ -225,6 +291,7 @@ function startPolling() {
   if (pollInterval) return;
 
   async function poll() {
+    if (isSeeking) return; // no sobreescribir mientras arrastra
     const track = await Spotify.fetchNowPlaying();
     if (track) {
       if (track.id !== lastId) { lastId = track.id; updateNowPlaying(track); }
@@ -243,6 +310,7 @@ function startPolling() {
   pollInterval = setInterval(poll, 5000);
 
   progressInterval = setInterval(() => {
+    if (isSeeking) return;
     if (isPlaying && localDuration > 0) {
       localProgress = Math.min(localProgress + 1000, localDuration);
       updateProgress({ progressMs: localProgress, durationMs: localDuration, playing: true });
@@ -264,7 +332,7 @@ function initSDK() {
   const token = Spotify.getToken();
   if (!token) return;
 
-  if (typeof Spotify_SDK === 'undefined') {
+  if (typeof window.Spotify === 'undefined') {
     window.onSpotifyWebPlaybackSDKReady = () => createPlayer(token);
   } else {
     createPlayer(token);
@@ -303,7 +371,6 @@ async function loadLibrary(filter) {
   const container = document.getElementById('libraryGrid');
   if (!container) return;
 
-  // Cache en localStorage
   const cacheKey = `lib_${state.library.filter}`;
   const cached   = localStorage.getItem(cacheKey);
   if (cached) renderLibrary(JSON.parse(cached));
