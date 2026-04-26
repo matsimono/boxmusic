@@ -210,3 +210,86 @@ export async function getSavedTracks() {
     uri: track.uri, type: 'track',
   }));
 }
+
+
+// ── DETAIL VIEWS ──────────────────────────────────────────────
+
+export async function getPlaylist(id) {
+  const data = await apiGet(`/playlists/${id}`);
+  if (!data) return null;
+  return {
+    id:     data.id,
+    name:   data.name,
+    cover:  data.images?.[0]?.url || null,
+    owner:  data.owner?.display_name || '',
+    desc:   data.description || '',
+    total:  data.tracks?.total || 0,
+    uri:    data.uri,
+    tracks: (data.tracks?.items || []).filter(i => i?.track).map(i => ({
+      id:         i.track.id,
+      name:       i.track.name,
+      artist:     i.track.artists.map(a => a.name).join(', '),
+      album:      i.track.album.name,
+      cover:      i.track.album.images?.[0]?.url || null,
+      uri:        i.track.uri,
+      durationMs: i.track.duration_ms,
+    })),
+  };
+}
+
+export async function getAlbum(id) {
+  const data = await apiGet(`/albums/${id}`);
+  if (!data) return null;
+  return {
+    id:     data.id,
+    name:   data.name,
+    cover:  data.images?.[0]?.url || null,
+    artist: data.artists.map(a => a.name).join(', '),
+    year:   data.release_date?.split('-')[0] || '',
+    total:  data.total_tracks,
+    uri:    data.uri,
+    tracks: (data.tracks?.items || []).map(t => ({
+      id:         t.id,
+      name:       t.name,
+      artist:     t.artists.map(a => a.name).join(', '),
+      album:      data.name,
+      cover:      data.images?.[0]?.url || null,
+      uri:        t.uri,
+      durationMs: t.duration_ms,
+    })),
+  };
+}
+
+export async function getArtist(id) {
+  const [artist, topTracks, albums] = await Promise.all([
+    apiGet(`/artists/${id}`),
+    apiGet(`/artists/${id}/top-tracks?market=ES`),
+    apiGet(`/artists/${id}/albums?include_groups=album,single&limit=20&market=ES`),
+  ]);
+  if (!artist) return null;
+  return {
+    id:        artist.id,
+    name:      artist.name,
+    cover:     artist.images?.[0]?.url || null,
+    followers: artist.followers?.total || 0,
+    genres:    artist.genres || [],
+    uri:       artist.uri,
+    topTracks: (topTracks?.tracks || []).map(t => ({
+      id:         t.id,
+      name:       t.name,
+      artist:     t.artists.map(a => a.name).join(', '),
+      album:      t.album.name,
+      cover:      t.album.images?.[0]?.url || null,
+      uri:        t.uri,
+      durationMs: t.duration_ms,
+    })),
+    albums: (albums?.items || []).map(a => ({
+      id:    a.id,
+      name:  a.name,
+      cover: a.images?.[0]?.url || null,
+      year:  a.release_date?.split('-')[0] || '',
+      type:  a.album_type,
+      uri:   a.uri,
+    })),
+  };
+}

@@ -198,7 +198,7 @@ function createPlayer(token) {
 
 function homeCard(item) {
   return `
-    <div class="home-card" data-uri="${item.uri || ''}">
+    <div class="home-card" data-type="${item.type || ''}" data-id="${item.id || ''}" data-uri="${item.uri || ''}">
       <div class="home-card-cover">
         ${item.cover
           ? `<img src="${item.cover}" alt="${item.name}" loading="lazy">`
@@ -305,7 +305,7 @@ function renderLibrary(items) {
   if (!container) return;
   if (!items.length) { container.innerHTML = '<div class="lib-loading">Sin elementos</div>'; return; }
   container.innerHTML = items.map(item => `
-    <div class="lib-item" data-type="${item.type}" data-uri="${item.uri || ''}">
+    <div class="lib-item" data-type="${item.type}" data-id="${item.id || ''}" data-uri="${item.uri || ''}">
       <div class="lib-cover">
         ${item.cover ? `<img src="${item.cover}" alt="${item.name}" loading="lazy">` : `<div class="lib-cover-placeholder"></div>`}
         <div class="lib-type-badge">${{ playlist:'Lista', album:'Álbum', artist:'Artista', track:'Canción' }[item.type] || ''}</div>
@@ -351,6 +351,128 @@ document.querySelectorAll('.pin-slot').forEach(slot => {
   slot.addEventListener('click', () => console.log(`Pin slot ${slot.dataset.index}`));
 });
 
+
+
+// ══ DETAIL VIEWS ══════════════════════════════════════════════
+
+function formatMs(ms) {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+}
+
+function detailTrackRow(track, index) {
+  return `
+    <div class="detail-track" data-uri="${track.uri}">
+      <div class="detail-track-num">${index + 1}</div>
+      <div class="home-track-cover">
+        ${track.cover ? `<img src="${track.cover}" loading="lazy">` : '<div class="home-card-placeholder"></div>'}
+      </div>
+      <div class="home-track-info">
+        <div class="home-track-name">${track.name}</div>
+        <div class="home-track-artist">${track.artist}</div>
+      </div>
+      <div class="detail-track-dur">${formatMs(track.durationMs)}</div>
+    </div>`;
+}
+
+function showDetail(html) {
+  const panel = document.getElementById('detailPanel');
+  const content = document.getElementById('detailContent');
+  content.innerHTML = html;
+  panel.classList.remove('hidden');
+}
+
+function hideDetail() {
+  document.getElementById('detailPanel').classList.add('hidden');
+}
+
+document.getElementById('detailBack')?.addEventListener('click', hideDetail);
+
+async function openItem(type, id, uri) {
+  showDetail('<div class="detail-loading">Cargando...</div>');
+  try {
+    if (type === 'playlist') {
+      const pl = await Spotify.getPlaylist(id);
+      if (!pl) return;
+      showDetail(`
+        <div class="detail-header">
+          <div class="detail-cover">${pl.cover ? `<img src="${pl.cover}">` : '<div class="home-card-placeholder"></div>'}</div>
+          <div class="detail-meta">
+            <div class="detail-type">Playlist</div>
+            <div class="detail-title">${pl.name}</div>
+            <div class="detail-sub">${pl.owner} · ${pl.total} canciones</div>
+            ${pl.desc ? `<div class="detail-desc">${pl.desc}</div>` : ''}
+          </div>
+        </div>
+        <div class="detail-tracks">
+          ${pl.tracks.map((t, i) => detailTrackRow(t, i)).join('')}
+        </div>`);
+    } else if (type === 'album') {
+      const al = await Spotify.getAlbum(id);
+      if (!al) return;
+      showDetail(`
+        <div class="detail-header">
+          <div class="detail-cover">${al.cover ? `<img src="${al.cover}">` : '<div class="home-card-placeholder"></div>'}</div>
+          <div class="detail-meta">
+            <div class="detail-type">Álbum</div>
+            <div class="detail-title">${al.name}</div>
+            <div class="detail-sub">${al.artist} · ${al.year} · ${al.total} canciones</div>
+          </div>
+        </div>
+        <div class="detail-tracks">
+          ${al.tracks.map((t, i) => detailTrackRow(t, i)).join('')}
+        </div>`);
+    } else if (type === 'artist') {
+      const ar = await Spotify.getArtist(id);
+      if (!ar) return;
+      showDetail(`
+        <div class="detail-header artist">
+          <div class="detail-cover artist-cover">${ar.cover ? `<img src="${ar.cover}">` : '<div class="home-card-placeholder"></div>'}</div>
+          <div class="detail-meta">
+            <div class="detail-type">Artista</div>
+            <div class="detail-title">${ar.name}</div>
+            <div class="detail-sub">${ar.followers.toLocaleString()} seguidores</div>
+            ${ar.genres.length ? `<div class="detail-genres">${ar.genres.slice(0,4).map(g => `<span class="genre-chip">${g}</span>`).join('')}</div>` : ''}
+          </div>
+        </div>
+        <div class="detail-section-label">Canciones populares</div>
+        <div class="detail-tracks">
+          ${ar.topTracks.map((t, i) => detailTrackRow(t, i)).join('')}
+        </div>
+        ${ar.albums.length ? `
+        <div class="detail-section-label">Discografía</div>
+        <div class="home-row">
+          ${ar.albums.map(a => `
+            <div class="home-card" data-type="album" data-id="${a.id}" data-uri="${a.uri}">
+              <div class="home-card-cover">${a.cover ? `<img src="${a.cover}" loading="lazy">` : '<div class="home-card-placeholder"></div>'}</div>
+              <div class="home-card-name">${a.name}</div>
+              <div class="home-card-sub">${a.year} · ${a.type}</div>
+            </div>`).join('')}
+        </div>` : ''}
+      `);
+    }
+  } catch(e) {
+    showDetail('<div class="detail-loading">Error cargando contenido</div>');
+  }
+}
+
+// Click delegation para abrir items
+document.addEventListener('click', e => {
+  const card = e.target.closest('[data-type][data-id], [data-type][data-uri]');
+  if (!card) return;
+  const type = card.dataset.type;
+  const uri  = card.dataset.uri || '';
+  let id     = card.dataset.id;
+
+  // Extraer id del URI si no está en data-id
+  if (!id && uri) {
+    const parts = uri.split(':');
+    id = parts[parts.length - 1];
+  }
+
+  if (!id || !type || type === 'track') return;
+  openItem(type, id, uri);
+});
 
 // ══ INIT ══════════════════════════════════════════════════════
 
