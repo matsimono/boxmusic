@@ -110,9 +110,11 @@
       <div class="lib-header">
         <div class="grid-label">Biblioteca</div>
         <div class="lib-filters">
-          <button class="lib-filter-btn active" data-filter="albumes">Álbumes</button>
+          <button class="lib-filter-btn active" data-filter="todo">Todo</button>
+          <button class="lib-filter-btn" data-filter="playlists">Playlists</button>
+          <button class="lib-filter-btn" data-filter="albumes">Álbumes</button>
           <button class="lib-filter-btn" data-filter="artistas">Artistas</button>
-          <button class="lib-filter-btn" data-filter="coleccion">Colección física</button>
+          <button class="lib-filter-btn" data-filter="canciones">Canciones</button>
         </div>
       </div>
       <div class="left-scroll">
@@ -132,12 +134,14 @@
       </div>
     </div>
 
-    <!-- FAVORITOS -->
+    <!-- FAVORITOS / WISHLIST -->
     <div class="view" id="view-favoritos">
+      <div class="lib-header">
+        <div class="grid-label">Wishlist</div>
+      </div>
       <div class="left-scroll">
-        <div class="section-block">
-          <div class="grid-label">Favoritos</div>
-          <div id="favoritesList"><div class="recent-placeholder">Sin favoritos aún</div></div>
+        <div class="lib-grid" id="wishlistGrid">
+          <div class="lib-loading">Cargando wishlist...</div>
         </div>
       </div>
     </div>
@@ -261,6 +265,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="15 18 9 12 15 6"/></svg>
       Volver
     </button>
+    <div id="detailWishlistBtn"></div>
   </div>
   <div class="detail-scroll">
     <div id="detailContent"></div>

@@ -3,15 +3,17 @@
    ══════════════════════════════ */
 
 import * as Spotify from './spotify.js';
+import * as Wishlist from './wishlist.js';
 
 const state = {
   connected:   false,
+  userId:      null,
   nowPlaying:  null,
   deviceId:    null,
   panelOpen:   true,
   panelWidth:  260,
   currentView: 'inicio',
-  library:     { filter: 'albumes' },
+  library:     { filter: 'todo' },
 };
 
 // ── DOM refs ──
@@ -41,6 +43,7 @@ function navigate(viewId) {
   state.currentView = viewId;
   if (viewId === 'busqueda')  searchInput.focus();
   if (viewId === 'biblioteca') loadLibrary();
+  if (viewId === 'favoritos')  loadWishlistCache();
 }
 
 document.querySelectorAll('.sidebar-btn[data-view]').forEach(btn => {
@@ -277,31 +280,22 @@ async function loadHomeSections() {
 
 async function loadLibrary(filter) {
   if (filter) state.library.filter = filter;
+  if (!state.connected) return;
   const container = document.getElementById('libraryGrid');
   if (!container) return;
 
-  const f = state.library.filter;
-
-  // Colección física no necesita Spotify
-  if (f === 'coleccion') {
-    container.innerHTML = '<div class="lib-loading">Conecta Discogs para ver tu colección física</div>';
-    return;
-  }
-
-  if (!state.connected) {
-    container.innerHTML = '<div class="lib-loading">Conecta Spotify para ver tu biblioteca</div>';
-    return;
-  }
-
-  const cacheKey = `lib_${f}`;
+  const cacheKey = `lib_${state.library.filter}`;
   const cached   = localStorage.getItem(cacheKey);
   if (cached) renderLibrary(JSON.parse(cached));
   else container.innerHTML = '<div class="lib-loading">Cargando...</div>';
 
   try {
     let items = [];
-    if (f === 'albumes')  items = await Spotify.getSavedAlbums();
-    if (f === 'artistas') items = await Spotify.getFollowedArtists();
+    const f = state.library.filter;
+    if (f === 'todo' || f === 'playlists') items = items.concat(await Spotify.getPlaylists());
+    if (f === 'todo' || f === 'albumes')   items = items.concat(await Spotify.getSavedAlbums());
+    if (f === 'todo' || f === 'artistas')  items = items.concat(await Spotify.getFollowedArtists());
+    if (f === 'canciones')                 items = items.concat(await Spotify.getSavedTracks());
     localStorage.setItem(cacheKey, JSON.stringify(items));
     renderLibrary(items);
   } catch (e) {
@@ -384,11 +378,19 @@ function detailTrackRow(track, index) {
     </div>`;
 }
 
-function showDetail(html) {
+function showDetail(html, item) {
   const panel = document.getElementById('detailPanel');
   const content = document.getElementById('detailContent');
   content.innerHTML = html;
   panel.classList.remove('hidden');
+
+  // Wishlist button in topbar
+  const wbtn = document.getElementById('detailWishlistBtn');
+  if (wbtn && item) {
+    wbtn.innerHTML = wishlistBtn(item);
+  } else if (wbtn) {
+    wbtn.innerHTML = '';
+  }
 }
 
 function hideDetail() {
@@ -403,6 +405,7 @@ async function openItem(type, id, uri) {
     if (type === 'playlist') {
       const pl = await Spotify.getPlaylist(id);
       if (!pl) return;
+      const plItem = {id: pl.id, type: 'playlist', name: pl.name, cover: pl.cover, uri: pl.uri};
       showDetail(`
         <div class="detail-header">
           <div class="detail-cover">${pl.cover ? `<img src="${pl.cover}">` : '<div class="home-card-placeholder"></div>'}</div>
@@ -415,10 +418,11 @@ async function openItem(type, id, uri) {
         </div>
         <div class="detail-tracks">
           ${pl.tracks.map((t, i) => detailTrackRow(t, i)).join('')}
-        </div>`);
+        </div>`, plItem);
     } else if (type === 'album') {
       const al = await Spotify.getAlbum(id);
       if (!al) return;
+      const alItem = {id: al.id, type: 'album', name: al.name, cover: al.cover, artist: al.artist, year: al.year, uri: al.uri};
       showDetail(`
         <div class="detail-header">
           <div class="detail-cover">${al.cover ? `<img src="${al.cover}">` : '<div class="home-card-placeholder"></div>'}</div>
@@ -430,10 +434,11 @@ async function openItem(type, id, uri) {
         </div>
         <div class="detail-tracks">
           ${al.tracks.map((t, i) => detailTrackRow(t, i)).join('')}
-        </div>`);
+        </div>`, alItem);
     } else if (type === 'artist') {
       const ar = await Spotify.getArtist(id);
       if (!ar) return;
+      const arItem = {id: ar.id, type: 'artist', name: ar.name, cover: ar.cover, uri: ar.uri};
       showDetail(`
         <div class="detail-header artist">
           <div class="detail-cover artist-cover">${ar.cover ? `<img src="${ar.cover}">` : '<div class="home-card-placeholder"></div>'}</div>
@@ -483,6 +488,92 @@ document.addEventListener('click', e => {
   openItem(type, id, uri);
 });
 
+
+// ══ WISHLIST ══════════════════════════════════════════════════
+
+let wishlistCache = new Set();
+
+async function loadWishlistCache() {
+  if (!state.userId) return;
+  const items = await Wishlist.getWishlist(state.userId);
+  wishlistCache = new Set(items.map(i => i.spotify_id));
+  renderWishlistView(items);
+}
+
+function isWishlisted(id) {
+  return wishlistCache.has(id);
+}
+
+async function toggleWishlist(item) {
+  if (!state.userId) return;
+  if (isWishlisted(item.id)) {
+    await Wishlist.removeFromWishlist(state.userId, item.id);
+    wishlistCache.delete(item.id);
+  } else {
+    await Wishlist.addToWishlist(state.userId, item);
+    wishlistCache.add(item.id);
+  }
+  // Refresh wishlist view if active
+  if (state.currentView === 'favoritos') loadWishlistCache();
+  return isWishlisted(item.id);
+}
+
+function wishlistBtn(item) {
+  const active = isWishlisted(item.id);
+  return `<button class="wishlist-btn ${active ? 'active' : ''}" 
+    data-wishlist-id="${item.id}"
+    data-wishlist-type="${item.type}"
+    data-wishlist-name="${item.name}"
+    data-wishlist-cover="${item.cover || ''}"
+    data-wishlist-artist="${item.artist || ''}"
+    data-wishlist-year="${item.year || ''}"
+    data-wishlist-uri="${item.uri || ''}"
+    title="${active ? 'Quitar de wishlist' : 'Añadir a wishlist'}">
+    <svg viewBox="0 0 24 24" fill="${active ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" width="16" height="16">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+    </svg>
+  </button>`;
+}
+
+// Click delegation para wishlist buttons
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('.wishlist-btn');
+  if (!btn) return;
+  e.stopPropagation();
+  const item = {
+    id:     btn.dataset.wishlistId,
+    type:   btn.dataset.wishlistType,
+    name:   btn.dataset.wishlistName,
+    cover:  btn.dataset.wishlistCover || null,
+    artist: btn.dataset.wishlistArtist || null,
+    year:   btn.dataset.wishlistYear || null,
+    uri:    btn.dataset.wishlistUri || null,
+  };
+  const nowActive = await toggleWishlist(item);
+  const svg = btn.querySelector('svg');
+  svg.setAttribute('fill', nowActive ? 'currentColor' : 'none');
+  btn.classList.toggle('active', nowActive);
+  btn.title = nowActive ? 'Quitar de wishlist' : 'Añadir a wishlist';
+});
+
+function renderWishlistView(items) {
+  const container = document.getElementById('wishlistGrid');
+  if (!container) return;
+  if (!items.length) {
+    container.innerHTML = '<div class="lib-loading">Tu wishlist está vacía</div>';
+    return;
+  }
+  container.innerHTML = items.map(item => `
+    <div class="lib-item" data-type="${item.type}" data-id="${item.spotify_id}" data-uri="${item.uri || ''}">
+      <div class="lib-cover">
+        ${item.cover ? `<img src="${item.cover}" alt="${item.name}" loading="lazy">` : '<div class="lib-cover-placeholder"></div>'}
+        <div class="lib-type-badge">${{album:'Álbum', artist:'Artista', playlist:'Lista', track:'Canción'}[item.type] || ''}</div>
+      </div>
+      <div class="lib-name">${item.name}</div>
+      <div class="lib-sub">${item.artist || ''} ${item.year ? '· ' + item.year : ''}</div>
+    </div>`).join('');
+}
+
 // ══ INIT ══════════════════════════════════════════════════════
 
 async function init() {
@@ -494,6 +585,10 @@ async function init() {
     startPolling();
     initSDK();
     loadHomeSections();
+    // Cargar user ID para wishlist
+    Spotify.getMe().then(me => {
+      if (me?.id) { state.userId = me.id; loadWishlistCache(); }
+    });
   } else {
     updateSpotifyUI();
   }
