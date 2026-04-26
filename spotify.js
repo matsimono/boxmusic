@@ -215,17 +215,27 @@ export async function getSavedTracks() {
 // ── DETAIL VIEWS ──────────────────────────────────────────────
 
 export async function getPlaylist(id) {
-  const data = await apiGet(`/playlists/${id}`);
+  const data = await apiGet(`/playlists/${id}?fields=id,name,description,images,owner,uri,tracks(total)`);
   if (!data) return null;
+
+  // Paginar todas las canciones
+  let trackItems = [], url = `/playlists/${id}/tracks?limit=100`;
+  while (url) {
+    const page = await apiGet(url.replace('https://api.spotify.com/v1', ''));
+    if (!page) break;
+    trackItems = trackItems.concat(page.items || []);
+    url = page.next ? page.next.replace('https://api.spotify.com/v1', '') : null;
+  }
+
   return {
     id:     data.id,
     name:   data.name,
     cover:  data.images?.[0]?.url || null,
     owner:  data.owner?.display_name || '',
     desc:   data.description || '',
-    total:  data.tracks?.total || 0,
+    total:  trackItems.length,
     uri:    data.uri,
-    tracks: (data.tracks?.items || []).filter(i => i?.track).map(i => ({
+    tracks: trackItems.filter(i => i?.track).map(i => ({
       id:         i.track.id,
       name:       i.track.name,
       artist:     i.track.artists.map(a => a.name).join(', '),
