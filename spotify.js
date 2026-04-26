@@ -215,7 +215,7 @@ export async function getSavedTracks() {
 // ── DETAIL VIEWS ──────────────────────────────────────────────
 
 export async function getPlaylist(id) {
-  const data = await apiGet(`/playlists/${id}?fields=id,name,description,images,owner,uri,tracks(total)`);
+  const data = await apiGet(`/playlists/${id}`);
   if (!data) return null;
 
   // Paginar todas las canciones
