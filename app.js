@@ -307,15 +307,31 @@ function renderLibrary(items) {
   const container = document.getElementById('libraryGrid');
   if (!container) return;
   if (!items.length) { container.innerHTML = '<div class="lib-loading">Sin elementos</div>'; return; }
-  container.innerHTML = items.map(item => `
+  container.innerHTML = items.map(item => {
+    const wishlisted = isWishlisted(item.id);
+    return `
     <div class="lib-item" data-type="${item.type}" data-id="${item.id || ''}" data-uri="${item.uri || ''}">
       <div class="lib-cover">
         ${item.cover ? `<img src="${item.cover}" alt="${item.name}" loading="lazy">` : `<div class="lib-cover-placeholder"></div>`}
         <div class="lib-type-badge">${{ playlist:'Lista', album:'Álbum', artist:'Artista', track:'Canción' }[item.type] || ''}</div>
+        <button class="lib-wish-btn ${wishlisted ? 'active' : ''}"
+          data-wishlist-id="${item.id}"
+          data-wishlist-type="${item.type}"
+          data-wishlist-name="${item.name}"
+          data-wishlist-cover="${item.cover || ''}"
+          data-wishlist-artist="${item.artist || ''}"
+          data-wishlist-year="${item.year || ''}"
+          data-wishlist-uri="${item.uri || ''}"
+          title="${wishlisted ? 'Quitar de wishlist' : 'Añadir a wishlist'}">
+          <svg viewBox="0 0 24 24" fill="${wishlisted ? '#e91e63' : 'none'}" stroke="${wishlisted ? '#e91e63' : '#fff'}" stroke-width="2" width="13" height="13">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+          </svg>
+        </button>
       </div>
       <div class="lib-name">${item.name}</div>
       <div class="lib-sub">${libSub(item)}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function libSub(item) {
@@ -535,7 +551,30 @@ function wishlistBtn(item) {
   </button>`;
 }
 
-// Click delegation para wishlist buttons
+// Click delegation para wishlist buttons (detail panel + library)
+document.addEventListener('click', async e => {
+  const libBtn = e.target.closest('.lib-wish-btn');
+  if (libBtn) {
+    e.stopPropagation();
+    const item = {
+      id:     libBtn.dataset.wishlistId,
+      type:   libBtn.dataset.wishlistType,
+      name:   libBtn.dataset.wishlistName,
+      cover:  libBtn.dataset.wishlistCover || null,
+      artist: libBtn.dataset.wishlistArtist || null,
+      year:   libBtn.dataset.wishlistYear || null,
+      uri:    libBtn.dataset.wishlistUri || null,
+    };
+    const nowActive = await toggleWishlist(item);
+    const svg = libBtn.querySelector('svg');
+    svg.setAttribute('fill', nowActive ? '#e91e63' : 'none');
+    svg.setAttribute('stroke', nowActive ? '#e91e63' : '#fff');
+    libBtn.classList.toggle('active', nowActive);
+    libBtn.title = nowActive ? 'Quitar de wishlist' : 'Añadir a wishlist';
+    return;
+  }
+});
+
 document.addEventListener('click', async e => {
   const btn = e.target.closest('.wishlist-btn');
   if (!btn) return;
