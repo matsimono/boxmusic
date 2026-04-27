@@ -41,9 +41,9 @@ function navigate(viewId) {
   const activeBtn = document.querySelector(`.sidebar-btn[data-view="${viewId}"]`);
   if (activeBtn) activeBtn.classList.add('active');
   state.currentView = viewId;
-  if (viewId === 'busqueda')  searchInput.focus();
+  if (viewId === 'busqueda')   searchInput.focus();
   if (viewId === 'biblioteca') loadLibrary();
-  if (viewId === 'favoritos')  loadWishlistCache();
+  if (viewId === 'coleccion')  loadWishlistCache();
 }
 
 document.querySelectorAll('.sidebar-btn[data-view]').forEach(btn => {
@@ -279,6 +279,10 @@ async function loadHomeSections() {
 // ══ BIBLIOTECA ═══════════════════════════════════════════════
 
 async function loadLibrary(filter) {
+  // Ensure wishlist cache is loaded before rendering
+  if (state.userId && wishlistCache.size === 0) {
+    await loadWishlistCache();
+  }
   if (filter) state.library.filter = filter;
   if (!state.connected) return;
   const container = document.getElementById('libraryGrid');
@@ -510,7 +514,11 @@ document.addEventListener('click', e => {
 let wishlistCache = new Set();
 
 async function loadWishlistCache() {
-  if (!state.userId) return;
+  // Wait for userId if not ready yet
+  if (!state.userId) {
+    setTimeout(loadWishlistCache, 500);
+    return;
+  }
   const items = await Wishlist.getWishlist(state.userId);
   wishlistCache = new Set(items.map(i => i.spotify_id));
   renderWishlistView(items);
@@ -596,7 +604,7 @@ document.addEventListener('click', async e => {
 });
 
 function renderWishlistView(items) {
-  const container = document.getElementById('wishlistGrid');
+  const container = document.getElementById('col-wishlist-grid') || document.getElementById('wishlistGrid');
   if (!container) return;
   if (!items.length) {
     container.innerHTML = '<div class="lib-loading">Tu wishlist está vacía</div>';
@@ -613,10 +621,27 @@ function renderWishlistView(items) {
     </div>`).join('');
 }
 
+// ══ COLECCIÓN SUB-TABS ════════════════════════════════════════
+
+function initColeccionTabs() {
+  document.querySelectorAll('.col-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.col-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.col-tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      const panel = document.getElementById('col-tab-' + btn.dataset.tab);
+      if (panel) panel.classList.add('active');
+      if (btn.dataset.tab === 'wishlist') loadWishlistCache();
+    });
+  });
+}
+
 // ══ INIT ══════════════════════════════════════════════════════
 
 async function init() {
   nowplayingSection.style.width = state.panelWidth + 'px';
+
+  initColeccionTabs();
 
   if (Spotify.isConnected()) {
     state.connected = true;
