@@ -83,6 +83,8 @@ export function logout() {
 export function getToken()    { return localStorage.getItem('spotify_access_token'); }
 export function isConnected() { return !!getToken() && Date.now() < +localStorage.getItem('spotify_expires_at'); }
 
+export async function getMe() { return apiFetch('/me'); }
+
 async function refreshToken() {
   const refresh = localStorage.getItem('spotify_refresh_token');
   if (!refresh) return;
